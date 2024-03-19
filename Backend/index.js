@@ -18,53 +18,70 @@ const adminsecretKey = process.env.ADMINSECRETKEY;
 const usersecretKey = process.env.USERSECRETKEY;
 
 const admingeneratejwt = (object) => {
-  return jwt.sign({ username: object.username }, adminsecretKey);
+  return jwt.sign({ username: object.username }, adminsecretKey, {
+    expiresIn: "1h",
+  });
 };
 const usergeneratejwt = (object) => {
-  return jwt.sign({ username: object.username }, usersecretKey);
+  return jwt.sign({ username: object.username }, usersecretKey, {
+    expiresIn: "1h",
+  });
 };
 
 const adminAuthentication = (req, res, next) => {
-  console.log(req.headers);
-  jwt.verify(req.headers, adminsecretKey, (err, orignalData) => {
-    if (err) {
-      res.sendStatus(402);
-    } else {
-      next();
-    }
-  });
+  // console.log(req.headers.authorization);
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const token = authHeader.split(" ")[1];
+    jwt.verify(token, adminsecretKey, (err, orignalData) => {
+      if (err) {
+        res.sendStatus(402);
+      } else {
+        next();
+      }
+    });
+  } else {
+    res.sendStatus(401);
+  }
 };
 
 const userAuthentication = (req, res, next) => {
-  console.log(req.headers);
-  jwt.verify(req.headers, usersecretKey, (err, orignalData) => {
-    if (err) {
-      res.sendStatus(401);
-    } else {
-      console.log(originalData);
-      const user = USER.find((u) => u.username === orignalData.username);
-      req.user = user; //we can use it in next callback, in middleware we can update the req and res objects
-      next();
-    }
-  });
+  console.log(req.headers.authorization);
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const token = authHeader.split(" ")[1];
+    jwt.verify(token, usersecretKey, (err, orignalData) => {
+      if (err) {
+        res.sendStatus(401);
+      } else {
+        console.log(originalData);
+        const user = USER.find((u) => u.username === orignalData.username);
+        req.user = user; //we can use it in next callback, in middleware we can update the req and res objects
+        next();
+      }
+    });
+  } else {
+    res.sendStatus(401);
+  }
 };
 
 //ADMIN ROUTES
 app.post("/admin/signUp", (req, res) => {
   var existingAccount = ADMIN.find((a) => {
-    if (a.username === req.headers.username) {
+    if (a.username === req.body.username) {
       return a;
     }
   });
   if (existingAccount) {
-    res.status(409).json({
+    res.status(403).json({
       message: "An account with the specified username/email already exists.",
     });
+  } else {
+    ADMIN.push(req.body);
+    const token = admingeneratejwt(req.body);
+    res.json({ message: "Account is successfully created", token });
+    console.log(req.body);
   }
-  ADMIN.push(req.headers);
-  const token = admingeneratejwt(req.headers);
-  res.status(200).json({ message: "Account is successfully created", token });
-  console.log(req.headers);
 });
 
 app.post("/admin/login", (req, res) => {
@@ -79,9 +96,9 @@ app.post("/admin/login", (req, res) => {
   });
   if (existingAccount) {
     const token = admingeneratejwt(req.headers);
-    res.status(200).json({ message: "Login Successfully", token });
+    res.json({ message: "Login Successfully", token });
   } else {
-    res.sendStatus(403); //should be provide as if else cannot set header after they sent to client
+    res.sendStatus(403); //Forbidden
   }
 });
 
@@ -99,22 +116,24 @@ app.post("/admin/courses", adminAuthentication, (req, res) => {
 app.put("/admin/courses/:courseId", adminAuthentication, (req, res) => {
   console.log(req.params.courseId);
   const courseId = parseInt(req.params.courseId);
-  const course = COURSES.find((c) => c.courseId === courseId);
-  console.log(course);
+  const courseInd = COURSES.findIndex((c) => c.courseId === courseId);
+  console.log(courseInd);
   //  course act as refrence to object it will upadate the original object in arrray
-  if (course) {
-    Object.assign(course, req.body);
-    console.log(course);
-    res.send({ Mssg: "Updated Successfully" });
+  // we cannot directly find course in arr as admin can pass wrong id which means course not exist
+  // to deal with that we find courseindex and if cid =-1 means does not exist;
+  if (courseInd > -1) {
+    Object.assign(COURSES[courseInd], req.body);
+    console.log(COURSES[courseInd]);
+    res.json({ Mssg: "Updated Successfully" });
   }
   res.status(404).send({ messg: "Course does not exist in database" });
 });
 
 app.get("/admin/courses", adminAuthentication, (req, res) => {
-  res.json(COURSES);
+  res.json({ courses: COURSES });
 });
 
-// admin person can be uer person but user person cannot be admin
+// admin person can be user person but user person cannot be admin
 // USERS ROUTES
 app.post("/users/signUp", (req, res) => {
   const user = {
