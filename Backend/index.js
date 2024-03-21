@@ -37,6 +37,10 @@ const adminAuthentication = (req, res, next) => {
       if (err) {
         res.sendStatus(402);
       } else {
+        const admin = ADMIN.find(
+          (admin) => admin.username === orignalData.username
+        );
+        req.admin = admin;
         next();
       }
     });
@@ -100,6 +104,11 @@ app.post("/admin/login", (req, res) => {
   } else {
     res.sendStatus(403); //Forbidden
   }
+});
+
+app.get("/admin/me", adminAuthentication, (req, res) => {
+  let username = req.admin.username;
+  res.json({ username });
 });
 
 // var courseId = 0;
